@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+#usage: ./recovery_instance_by_id.py -i INSTANCE_ID [-f HOSTNAME]
+
+import gettext
+import os
+import sys
+
+from optparse import OptionParser
+from socket import gethostname
+
+gettext.install('nova', unicode=1)
+
+from nova import context
+from nova import db
+from nova import flags
+from nova import utils
+from nova.network import manager
+from nova.volume import manager
+from nova.virt.libvirt_conn import get_connection, _get_network_info
+
+FLAGS = flags.FLAGS
+
+def main():
+    usage = "usage: %prog -i INSTANCE_ID [ -h HOSTNAME]"
+    parser = OptionParser(usage=usage)
+    parser.add_option('-i', '--instance', dest='instance', help='instance ID')
+    parser.add_option('-f', '--fqdn', dest='hostname', help='hostname like in openstack DB')
+    (options, args) = parser.parse_args() 
+    if not options.instance:
+        parser.error('Set instance ID you want to recover.')
+
+    instance_id = options.instance
+    recovery_host = options.hostname or gethostname()
+
+    utils.default_flagfile()
+    FLAGS(sys.argv)
+
+    ctxt = context.get_admin_context()
+    libvirt = get_connection(read_only=False)
+
+    volume_manager = utils.import_object(FLAGS.volume_manager)
+
+    instance_ref = db.instance_get(ctxt, instance_id)
+    db.instance_update(ctxt, instance_ref.id, {'host': recovery_host})
+    try:
+        virt_dom = libvirt._lookup_by_name(instance_ref['name'])
+    except:
+        virt_dom = None
+
+    if virt_dom:
+        try:
+            virt_dom.undefine()
+        except:
+            raise Exception('Could not undefine domain: %s', virt_dom)
+    libvirt.spawn(instance_ref, _get_network_info(instance_ref))
+    info = libvirt.get_info(instance_ref['name'])
+    db.instance_set_state(ctxt, instance_ref.id, info['state'])
+       
+    try:
+        volumes = db.volume_get_all_by_instance(ctxt, instance_ref.id)
+    except:
+        volumes = None
+    if volumes:
+        for volume in volumes:
+            dev_path = volume_manager.setup_compute_volume(ctxt, volume['id'])
+            libvirt.attach_volume(instance_ref['name'], dev_path, volume['mountpoint'])
+
+if __name__ == '__main__':
+    main()
