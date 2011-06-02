@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#usage: ./recovery_instance_by_id.py -i INSTANCE_ID [-f HOSTNAME]
+#usage: ./nova-compute -i INSTANCE_ID [-f HOSTNAME]
 
 import gettext
 import os
