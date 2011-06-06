@@ -1,5 +1,15 @@
 #!/usr/bin/env python
+#This script will help you to recover virtual machine in case of software or
+#hardware failure on host system. Run it on compute node where you want to
+#see instance after execution. In a nutshell, it do the following steps:
+# - update host information in DB for recovered instance
+# - spawn instance on compute node
+# - search for any attached volumes in DB
+# - look for volume device path, connect to it by iscsi or some other driver if necessary
+# - attach it to guest system.
+#
 #usage: ./nova-compute -i INSTANCE_ID [-f HOSTNAME]
+
 
 import gettext
 import os
